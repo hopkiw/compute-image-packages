@@ -45,3 +45,5 @@ tar czvf ${rpm_working_dir}/SOURCES/${NAME}_${VERSION}.orig.tar.gz \
 
 rpmbuild --define "_topdir ${rpm_working_dir}/" --define "_version ${VERSION}" \
   -ba ${rpm_working_dir}/SPECS/${NAME}.spec
+
+find ${rpm_working_dir} -type f -iname '*.rpm'| while read pkg; do echo "checking package: "; rpm -qpl "$pkg"; done

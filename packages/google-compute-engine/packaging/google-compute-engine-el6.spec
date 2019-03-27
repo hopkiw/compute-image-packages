@@ -44,6 +44,8 @@ specific to the Google Compute Engine cloud environment.
 cp -a src/{etc,usr} %{buildroot}
 install -d %{buildroot}/lib/
 cp -a src/lib/udev %{buildroot}/lib
+install -d %{buildroot}/usr/sbin/
+cp third_party/redhat-dhclient-script %{buildroot}/usr/sbin/google-dhclient-script
 
 %files
 %defattr(0644,root,root,0755)

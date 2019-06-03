@@ -12,6 +12,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
+set -e
 
 # Unit tests require gtest to be installed.
 g++ -o test_runner oslogin_utils_test.cc oslogin_utils.cc -I/usr/include/json-c -lcurl -ljson-c -lgtest -lpthread

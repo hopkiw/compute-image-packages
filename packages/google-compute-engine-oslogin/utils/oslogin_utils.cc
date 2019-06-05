@@ -664,13 +664,13 @@ bool FindGroup(struct group* result, BufferManager* buf, int* errnop) {
 
   string response;
   long http_code;
-  string pageToken = "";
+  string nextPageToken = "";
 
   do {
     url.str("");
     url << kMetadataServerUrl << "groups";
-    if (pageToken != "")
-      url << "?pageToken=" << pageToken;
+    if (nextPageToken != "")
+      url << "?nextPageToken=" << nextPageToken;
 
     response.clear();
     http_code = 0;
@@ -680,8 +680,8 @@ bool FindGroup(struct group* result, BufferManager* buf, int* errnop) {
       return false;
     }
 
-    if (!ParseJsonToKey(response, "pageToken", &pageToken)) {
-      pageToken = "";
+    if (!ParseJsonToKey(response, "nextPageToken", &nextPageToken)) {
+      nextPageToken = "";
     }
 
     groups.clear();
@@ -709,22 +709,24 @@ bool FindGroup(struct group* result, BufferManager* buf, int* errnop) {
         return true;
       }
     }
-  } while (pageToken != "");
+  } while (nextPageToken != "");
+  // Not found.
   *errnop = ENOENT;
   return false;
 }
 
-bool GetUsersForGroup(string groupname, std::vector<string>* users, int* errnop) {
+bool GetGroupsForUser(string username, std::vector<Group>* groups, int* errnop) {
+  std::stringstream url;
+
   string response;
   long http_code;
-  string pageToken = "";
-  std::stringstream url;
+  string nextPageToken = "";
 
   do {
     url.str("");
-    url << kMetadataServerUrl << "users?groupname=" << groupname;
-    if (pageToken != "")
-      url << "?pageToken=" << pageToken;
+    url << kMetadataServerUrl << "groups?username=" << username;
+    if (nextPageToken != "")
+      url << "?nextPageToken=" << nextPageToken;
 
     response.clear();
     http_code = 0;
@@ -733,14 +735,46 @@ bool GetUsersForGroup(string groupname, std::vector<string>* users, int* errnop)
       *errnop = EAGAIN;
       return false;
     }
-    if (!ParseJsonToKey(response, "pageToken", &pageToken)) {
-      pageToken = "";
+
+    if (!ParseJsonToKey(response, "nextPageToken", &nextPageToken)) {
+      nextPageToken = "";
+    }
+
+    if (!ParseJsonToGroups(response, groups)) {
+      *errnop = ENOENT;
+      return false;
+    }
+  } while (nextPageToken != "");
+  return true;
+}
+
+bool GetUsersForGroup(string groupname, std::vector<string>* users, int* errnop) {
+  string response;
+  long http_code;
+  string nextPageToken = "";
+  std::stringstream url;
+
+  do {
+    url.str("");
+    url << kMetadataServerUrl << "users?groupname=" << groupname;
+    if (nextPageToken != "")
+      url << "?nextPageToken=" << nextPageToken;
+
+    response.clear();
+    http_code = 0;
+    if (!HttpGet(url.str(), &response, &http_code) || http_code != 200 ||
+        response.empty()) {
+      *errnop = EAGAIN;
+      return false;
+    }
+    if (!ParseJsonToKey(response, "nextPageToken", &nextPageToken)) {
+      nextPageToken = "";
     }
     if (!ParseJsonToUsers(response, users)) {
       *errnop = EINVAL;
       return false;
     }
-  } while(pageToken != "");
+  } while(nextPageToken != "");
   return true;
 }
 

@@ -41,60 +41,72 @@ using oslogin_utils::ValidateUserName;
 
 static const char kSudoersDir[] = "/var/google-sudoers.d/";
 
-extern "C" {
 
-PAM_EXTERN int pam_sm_acct_mgmt(pam_handle_t *pamh, int flags, int argc,
-                                const char **argv) {
+extern "C" {
+int thefunc(pam_handle_t *pamh, int flags, int argc, const char **argv);
+
+PAM_EXTERN int pam_sm_authenticate(pam_handle_t *pamh, int flags, int argc, const char **argv) {
+  return thefunc(pamh, flags, argc, argv);
+}
+
+PAM_EXTERN int    pam_sm_acct_mgmt(pam_handle_t *pamh, int flags, int argc, const char **argv) {
+  return thefunc(pamh, flags, argc, argv);
+}
+
+int thefunc(pam_handle_t *pamh, int flags, int argc, const char **argv) {
   // The return value for this module should generally be ignored. By default we
   // will return PAM_SUCCESS.
-  int pam_result = PAM_SUCCESS;
+  openlog("pam_admin", LOG_PID|LOG_PERROR, LOG_DAEMON);
+  syslog(LOG_ERR, "Entered authenticate\n");
   const char *user_name;
-  if ((pam_result = pam_get_user(pamh, &user_name, NULL)) != PAM_SUCCESS) {
+  if (pam_get_user(pamh, &user_name, NULL) != PAM_SUCCESS) {
     PAM_SYSLOG(pamh, LOG_INFO, "Could not get pam user.");
-    return pam_result;
+    syslog(LOG_ERR, "Could not get pam user.");
+    closelog();
+    return PAM_IGNORE;
   }
+  syslog(LOG_ERR, "pam_get_user says %s", user_name);
+
+  char* item;
+  pam_get_item(pamh, PAM_RUSER, (const void **) &item);
+  syslog(LOG_ERR, "RUSER: %s", item);
 
   if (!ValidateUserName(user_name)) {
+    syslog(LOG_ERR, "Invalid username");
+    closelog();
     // If the user name is not a valid oslogin user, don't bother continuing.
-    return PAM_SUCCESS;
+    return PAM_IGNORE;
   }
 
   string response;
   if (!GetUser(user_name, &response)) {
-    return PAM_SUCCESS;
+    syslog(LOG_ERR, "GetUser returned false");
+    closelog();
+    return PAM_IGNORE;
   }
 
   string email;
   if (!ParseJsonToEmail(response, &email) || email.empty()) {
-    return PAM_SUCCESS;
+    syslog(LOG_ERR, "ParseJsonToEmail returned false");
+    closelog();
+    return PAM_IGNORE;
   }
+  syslog(LOG_ERR, "user %s becomes email %s", user_name, email.c_str());
 
   std::stringstream url;
   url << kMetadataServerUrl << "authorize?email=" << UrlEncode(email)
       << "&policy=adminLogin";
 
-  string filename = kSudoersDir;
-  filename.append(user_name);
-  struct stat buffer;
-  bool file_exists = !stat(filename.c_str(), &buffer);
   long http_code;
   if (HttpGet(url.str(), &response, &http_code) && http_code == 200 &&
       ParseJsonToSuccess(response)) {
-    if (!file_exists) {
-      PAM_SYSLOG(pamh, LOG_INFO,
-                 "Granting sudo permissions to organization user %s.",
-                 user_name);
-      std::ofstream sudoers_file;
-      sudoers_file.open(filename.c_str());
-      sudoers_file << user_name << " ALL=(ALL) NOPASSWD: ALL"
-                   << "\n";
-      sudoers_file.close();
-      chown(filename.c_str(), 0, 0);
-      chmod(filename.c_str(), S_IRUSR | S_IRGRP);
-    }
-  } else if (file_exists) {
-    remove(filename.c_str());
+    syslog(LOG_ERR, "PAM_SUCCESS");
+    closelog();
+    return PAM_SUCCESS;
   }
-  return pam_result;
+  syslog(LOG_ERR, "Falling through");
+  closelog();
+
+  return PAM_IGNORE;
 }
 }

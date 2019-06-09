@@ -61,6 +61,9 @@ extern "C" {
 // Get a passwd entry by id.
 enum nss_status _nss_oslogin_getpwuid_r(uid_t uid, struct passwd *result, char *buffer,
                             size_t buflen, int *errnop) {
+  openlog("nss_oslogin", LOG_PID|LOG_PERROR, LOG_DAEMON);
+  syslog(LOG_ERR, "getpwuid uid %d\n", uid);
+  closelog();
   BufferManager buffer_manager(buffer, buflen);
   std::stringstream url;
   url << kMetadataServerUrl << "users?uid=" << uid;
@@ -86,6 +89,9 @@ enum nss_status _nss_oslogin_getpwuid_r(uid_t uid, struct passwd *result, char *
 // Get a passwd entry by name.
 enum nss_status _nss_oslogin_getpwnam_r(const char *name, struct passwd *result,
                             char *buffer, size_t buflen, int *errnop) {
+  openlog("nss_oslogin", LOG_PID|LOG_PERROR, LOG_DAEMON);
+  syslog(LOG_ERR, "getpwnam name %s\n", name);
+  closelog();
   BufferManager buffer_manager(buffer, buflen);
   std::stringstream url;
   url << kMetadataServerUrl << "users?username=" << UrlEncode(name);
@@ -109,7 +115,18 @@ enum nss_status _nss_oslogin_getpwnam_r(const char *name, struct passwd *result,
 }
 
 enum nss_status _nss_oslogin_getgrby(struct group *grp, char *buf, size_t buflen, int *errnop) {
+  openlog("nss_oslogin", LOG_PID|LOG_PERROR, LOG_DAEMON);
+  syslog(LOG_ERR, "getgrby gid %d name %s\n", grp->gr_gid, grp->gr_name);
+  closelog();
+
   BufferManager buffer_manager(buf, buflen);
+  if ((strcmp(grp->gr_name, OSLOGIN_GROUP) == 0) || (grp->gr_gid == OSLOGIN_GID)) {
+    grp->gr_gid = OSLOGIN_GID;
+    if (!buffer_manager.AppendString(OSLOGIN_GROUP, &grp->gr_name, errnop)) {
+      return *errnop == ERANGE ? NSS_STATUS_TRYAGAIN : NSS_STATUS_NOTFOUND;
+    }
+  }
+
   if (!FindGroup(grp, &buffer_manager, errnop))
     return *errnop == ERANGE ? NSS_STATUS_TRYAGAIN : NSS_STATUS_NOTFOUND;
 
@@ -136,10 +153,19 @@ enum nss_status _nss_oslogin_getgrnam_r(const char *name, struct group *grp, cha
 
 enum nss_status _nss_oslogin_initgroups_dyn(const char *user, gid_t skipgroup, long int *start,
                                             long int *size, gid_t **groupsp, long int limit, int *errnop) {
+  openlog("nss_oslogin", LOG_PID|LOG_PERROR, LOG_DAEMON);
+  syslog(LOG_ERR, "initgroups user %s, start %u size %u \n", user, *start, *size);
+  closelog();
   std::vector<Group> grouplist;
   if (!GetGroupsForUser(string(user), &grouplist, errnop)) {
     return NSS_STATUS_NOTFOUND;
   }
+
+  // Always add at least the oslogin group.
+  grouplist.push_back(Group{gid: OSLOGIN_GID});
+  openlog("nss_oslogin", LOG_PID|LOG_PERROR, LOG_DAEMON);
+  syslog(LOG_ERR, "adding group %d : %s, now %d groups\n", OSLOGIN_GID, OSLOGIN_GROUP, grouplist.size());
+  closelog();
 
   gid_t* groups = *groupsp;
   for (auto & group: grouplist) {
@@ -181,6 +207,7 @@ NSS_METHOD_PROTOTYPE(__nss_compat_getpwent_r);
 NSS_METHOD_PROTOTYPE(__nss_compat_setpwent);
 NSS_METHOD_PROTOTYPE(__nss_compat_endpwent);
 NSS_METHOD_PROTOTYPE(__nss_compat_getgrnam_r);
+NSS_METHOD_PROTOTYPE(__nss_compat_getgrgid_r);
 NSS_METHOD_PROTOTYPE(__nss_compat_getgrgid_r);
 
 DECLARE_NSS_METHOD_TABLE(methods,

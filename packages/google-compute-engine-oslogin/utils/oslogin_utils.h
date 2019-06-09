@@ -23,6 +23,9 @@
 #define INTERNAL_TWO_FACTOR "INTERNAL_TWO_FACTOR"
 #define IDV_PREREGISTERED_PHONE "IDV_PREREGISTERED_PHONE"
 
+#define OSLOGIN_GROUP "oslogin"
+#define OSLOGIN_GID 6666
+
 using std::string;
 using std::vector;
 
